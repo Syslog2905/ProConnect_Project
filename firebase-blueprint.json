@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores professional profile data and GDPR settings.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "headline": { "type": "string" },
+        "bio": { "type": "string" },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "role": { "type": "string", "enum": ["professional", "recruiter", "admin"] },
+        "visibility": { "type": "string", "enum": ["active", "passive", "hidden"] },
+        "gdprConsent": { "type": "boolean" },
+        "consentDate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "gdprConsent"]
+    },
+    "Connection": {
+      "title": "Connection",
+      "description": "Represents a networking connection or request.",
+      "type": "object",
+      "properties": {
+        "fromUid": { "type": "string" },
+        "toUid": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fromUid", "toUid", "status"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Secure message between users.",
+      "type": "object",
+      "properties": {
+        "senderUid": { "type": "string" },
+        "receiverUid": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderUid", "receiverUid", "content"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "UserProfile",
+      "description": "User profile documents."
+    },
+    "/connections/{connectionId}": {
+      "schema": "Connection",
+      "description": "Networking connections."
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Direct messages."
+    }
+  }
+}

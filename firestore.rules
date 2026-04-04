@@ -1,0 +1,150 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {uid}
+// Fields:
+//   - uid: string (required, immutable) - Firebase Auth UID
+//   - displayName: string (optional) - User's full name
+//   - email: string (required) - User's email address
+//   - headline: string (optional) - Professional headline
+//   - bio: string (optional) - Professional bio
+//   - skills: list (optional) - List of skills
+//   - role: string (required) - 'professional', 'recruiter', or 'admin'
+//   - visibility: string (required) - 'active', 'passive', or 'hidden'
+//   - gdprConsent: bool (required) - Whether user has accepted GDPR terms
+//   - consentDate: timestamp (required) - When consent was given
+//   - createdAt: timestamp (required, immutable) - When profile was created
+//
+// Collection: connections
+// Document ID: {connectionId}
+// Fields:
+//   - fromUid: string (required) - UID of requester
+//   - toUid: string (required) - UID of recipient
+//   - status: string (required) - 'pending', 'accepted', 'rejected'
+//   - createdAt: timestamp (required, immutable)
+//
+// Collection: messages
+// Document ID: {messageId}
+// Fields:
+//   - senderUid: string (required) - UID of sender
+//   - receiverUid: string (required) - UID of receiver
+//   - content: string (required) - Message text
+//   - createdAt: timestamp (required, immutable)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+    
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "gershuin2905@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    // ===============================================================
+    // User Profiles
+    // ===============================================================
+    
+    function isValidUser(data) {
+      return data.uid is string &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['professional', 'recruiter', 'admin'] &&
+             data.visibility in ['active', 'passive', 'hidden'] &&
+             data.gdprConsent is bool &&
+             (data.consentDate is timestamp || (data.gdprConsent == false && data.consentDate == null)) &&
+             data.createdAt is timestamp &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('headline' in data) || (data.headline is string && data.headline.size() < 200)) &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() < 2000)) &&
+             (!('skills' in data) || (data.skills is list && data.skills.size() <= 50));
+    }
+
+    match /users/{userId} {
+      // Users can only read their own profile if it contains PII (email)
+      // For public profiles, we'd need a separate collection or denormalization
+      allow read: if isOwner(userId) || isAdmin();
+      
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      (request.resource.data.role != 'admin' || isAdmin());
+      
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
+                      request.resource.data.role == resource.data.role &&
+                      request.resource.data.uid == resource.data.uid &&
+                      request.resource.data.createdAt == resource.data.createdAt;
+      
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // ===============================================================
+    // Connections
+    // ===============================================================
+    
+    function isValidConnection(data) {
+      return data.fromUid is string &&
+             data.toUid is string &&
+             data.status in ['pending', 'accepted', 'rejected'] &&
+             data.createdAt is timestamp;
+    }
+
+    match /connections/{connectionId} {
+      allow read: if isAuthenticated() && (isOwner(resource.data.fromUid) || isOwner(resource.data.toUid) || isAdmin());
+      
+      allow create: if isAuthenticated() && isOwner(request.resource.data.fromUid) && isValidConnection(request.resource.data);
+      
+      allow update: if isAuthenticated() && 
+                      (isOwner(resource.data.toUid) || isOwner(resource.data.fromUid)) && 
+                      isValidConnection(request.resource.data) &&
+                      request.resource.data.fromUid == resource.data.fromUid &&
+                      request.resource.data.toUid == resource.data.toUid &&
+                      request.resource.data.createdAt == resource.data.createdAt;
+      
+      allow delete: if isAuthenticated() && (isOwner(resource.data.fromUid) || isOwner(resource.data.toUid) || isAdmin());
+    }
+
+    // ===============================================================
+    // Messages
+    // ===============================================================
+    
+    function isValidMessage(data) {
+      return data.senderUid is string &&
+             data.receiverUid is string &&
+             data.content is string && data.content.size() < 5000 &&
+             data.createdAt is timestamp;
+    }
+
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && (isOwner(resource.data.senderUid) || isOwner(resource.data.receiverUid) || isAdmin());
+      
+      allow create: if isAuthenticated() && isOwner(request.resource.data.senderUid) && isValidMessage(request.resource.data);
+      
+      // Messages are typically immutable
+      allow update: if false;
+      
+      allow delete: if isAuthenticated() && (isOwner(resource.data.senderUid) || isOwner(resource.data.receiverUid) || isAdmin());
+    }
+  }
+}
