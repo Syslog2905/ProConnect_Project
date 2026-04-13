@@ -32,23 +32,43 @@ import {
   User as UserIcon,
   Plus,
   Save,
-  Edit2
+  Edit2,
+  Building2,
+  Zap,
+  Crown,
+  CreditCard,
+  ClipboardList
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserProfile, Connection, ConnectionStatus } from '../types';
+import { UserProfile, Connection, ConnectionStatus, JobPost } from '../types';
+import { EmployerInsights } from './EmployerInsights';
+import { Pricing } from './Pricing';
 
-type Tab = 'network' | 'settings' | 'profile' | 'discovery';
+type Tab = 'network' | 'settings' | 'profile' | 'discovery' | 'insights' | 'pricing' | 'jobs';
 
 export function Dashboard() {
   const [user] = useAuthState(auth);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [activeTab, setActiveTab] = useState<Tab>('network');
+  const [activeTab, setActiveTab] = useState<Tab>(profile?.role === 'recruiter' ? 'discovery' : 'profile');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   // Discovery state
   const [discoveryUsers, setDiscoveryUsers] = useState<UserProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Jobs state
+  const [jobs, setJobs] = useState<JobPost[]>([]);
+  const [isPostingJob, setIsPostingJob] = useState(false);
+  const [jobForm, setJobForm] = useState({
+    title: '',
+    company: '',
+    location: '',
+    type: 'full-time' as JobPost['type'],
+    description: '',
+    requirements: '',
+    salaryRange: ''
+  });
   
   // Profile edit state
   const [isEditing, setIsEditing] = useState(false);
@@ -101,10 +121,18 @@ export function Dashboard() {
       setDiscoveryUsers(docs);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
 
+    // Listen to jobs
+    const jobsQ = query(collection(db, 'jobs'), where('status', '==', 'active'));
+    const unsubJobs = onSnapshot(jobsQ, (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as JobPost));
+      setJobs(docs);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'jobs'));
+
     return () => {
       unsubProfile();
       unsubConnections();
       unsubDiscovery();
+      unsubJobs();
     };
   }, [user]);
 
@@ -133,6 +161,40 @@ export function Dashboard() {
     }
   };
 
+  const postJob = async () => {
+    if (!user || !profile) return;
+    try {
+      const jobId = crypto.randomUUID();
+      const newJob: JobPost = {
+        id: jobId,
+        recruiterUid: user.uid,
+        title: jobForm.title,
+        company: jobForm.company,
+        location: jobForm.location,
+        type: jobForm.type,
+        description: jobForm.description,
+        requirements: jobForm.requirements.split(',').map(r => r.trim()).filter(r => r !== ''),
+        salaryRange: jobForm.salaryRange,
+        status: 'active',
+        createdAt: Timestamp.now()
+      };
+      await setDoc(doc(db, 'jobs', jobId), newJob);
+      setIsPostingJob(false);
+      setJobForm({
+        title: '',
+        company: '',
+        location: '',
+        type: 'full-time',
+        description: '',
+        requirements: '',
+        salaryRange: ''
+      });
+      alert("Job posted successfully!");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'jobs');
+    }
+  };
+
   const handleConnection = async (id: string, status: ConnectionStatus) => {
     try {
       const conn = connections.find(c => c.id === id);
@@ -144,7 +206,18 @@ export function Dashboard() {
   };
 
   const sendConnectionRequest = async (toUid: string) => {
-    if (!user) return;
+    if (!user || !profile) return;
+
+    // Credit check for recruiters
+    if (profile.role === 'recruiter' && profile.subscriptionTier !== 'pro') {
+      const currentCredits = profile.connectionCredits || 0;
+      if (currentCredits <= 0) {
+        alert("You have run out of connection credits. Upgrade to Pro for unlimited requests!");
+        setActiveTab('pricing');
+        return;
+      }
+    }
+
     try {
       const id = `${user.uid}_${toUid}`;
       await setDoc(doc(db, 'connections', id), {
@@ -154,9 +227,84 @@ export function Dashboard() {
         status: 'pending',
         createdAt: serverTimestamp()
       });
+
+      // Deduct credit if applicable
+      if (profile.role === 'recruiter' && profile.subscriptionTier !== 'pro') {
+        await setDoc(doc(db, 'users', user.uid), {
+          ...profile,
+          connectionCredits: (profile.connectionCredits || 1) - 1
+        });
+      }
+
       alert("Connection request sent!");
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `connections`);
+    }
+  };
+
+  const handleUpgrade = async (tier: 'pro' | 'free') => {
+    if (!user || !profile) return;
+
+    // If it's a downgrade or cancellation, we can handle it directly in Firestore for now
+    // (In a real app, you'd cancel the subscription in Lemon Squeezy via API)
+    if (tier === 'free') {
+      try {
+        const updates: Partial<UserProfile> = {
+          subscriptionTier: 'free',
+          isFeatured: false,
+          featuredUntil: null,
+        };
+        await setDoc(doc(db, 'users', user.uid), { ...profile, ...updates });
+        alert("Subscription updated successfully.");
+        return;
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+        return;
+      }
+    }
+
+    // For paid upgrades, redirect to Lemon Squeezy
+    try {
+      console.log("Starting upgrade process for tier:", tier, "Role:", profile.role);
+      
+      const variantId = profile.role === 'recruiter' 
+        ? import.meta.env.VITE_LEMON_SQUEEZY_PRO_PLAN_VARIANT_ID 
+        : import.meta.env.VITE_LEMON_SQUEEZY_FEATURED_BOOST_VARIANT_ID;
+
+      console.log("Selected Variant ID:", variantId);
+
+      if (!variantId) {
+        console.error("Missing Variant ID for role:", profile.role);
+        alert(`Configuration error: Missing Variant ID for ${profile.role}. Please check your Secrets.`);
+        return;
+      }
+
+      const response = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          variantId: String(variantId),
+          userId: user.uid,
+          userEmail: user.email,
+          returnUrl: window.location.origin
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Server error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.url) {
+        console.log("Redirecting to checkout:", data.url);
+        window.location.href = data.url;
+      } else {
+        throw new Error("No checkout URL returned from server");
+      }
+    } catch (error) {
+      console.error("Checkout error:", error);
+      alert(`Failed to start checkout: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -167,7 +315,7 @@ export function Dashboard() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `proconnect-data-${user?.uid}.json`;
+    a.download = `talentfabric-data-${user?.uid}.json`;
     a.click();
   };
 
@@ -203,57 +351,154 @@ export function Dashboard() {
               <div className="h-20 w-20 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 mb-4">
                 <UserIcon size={40} />
               </div>
-              <h2 className="text-xl font-bold text-slate-900">{profile.displayName}</h2>
-              <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1">{profile.role}</p>
+              <h2 className="text-xl font-bold text-slate-900 flex items-center justify-center gap-2">
+                {profile.displayName}
+                {profile.subscriptionTier === 'pro' && profile.role === 'recruiter' && (
+                  <Crown size={18} className="text-amber-500" title="Pro Recruiter" />
+                )}
+                {profile.isFeatured && profile.role === 'professional' && (
+                  <Zap size={18} className="text-indigo-500" title="Featured Professional" />
+                )}
+              </h2>
+              <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1">
+                {profile.role}
+                {profile.subscriptionTier === 'pro' && ' • PRO'}
+              </p>
               <p className="text-sm text-slate-500">{profile.headline || 'Professional Expert'}</p>
             </div>
             
+            {profile.role === 'recruiter' && profile.subscriptionTier !== 'pro' && (
+              <div className="mt-6 p-4 rounded-2xl bg-indigo-50 border border-indigo-100">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Connection Credits</span>
+                  <span className="text-xs font-bold text-indigo-700">{profile.connectionCredits || 0}/3</span>
+                </div>
+                <div className="h-2 w-full bg-indigo-200 rounded-full overflow-hidden mb-4">
+                  <div 
+                    className="h-full bg-indigo-600 transition-all" 
+                    style={{ width: `${((profile.connectionCredits || 0) / 3) * 100}%` }}
+                  />
+                </div>
+                <button 
+                  onClick={() => setActiveTab('pricing')}
+                  className="w-full py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100 flex items-center justify-center gap-2"
+                >
+                  <Zap size={14} />
+                  Upgrade to Pro
+                </button>
+              </div>
+            )}
+            
             <div className="mt-8 space-y-2">
               {profile.role === 'recruiter' && (
-                <button 
-                  onClick={() => setActiveTab('discovery')}
-                  className={`flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
-                    activeTab === 'discovery' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  <Search size={18} />
-                  <span>Discovery</span>
-                </button>
+                <div className="group relative">
+                  <button 
+                    onClick={() => setActiveTab('discovery')}
+                    className={`flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
+                      activeTab === 'discovery' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Search size={18} />
+                    <span>Discovery</span>
+                  </button>
+                  <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                    Find and connect with active professionals
+                  </div>
+                </div>
               )}
               {profile.role === 'professional' && (
+                <div className="group relative">
+                  <button 
+                    onClick={() => setActiveTab('profile')}
+                    className={`flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
+                      activeTab === 'profile' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <UserIcon size={18} />
+                    <span>My Profile</span>
+                  </button>
+                  <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                    Manage your professional identity and skills
+                  </div>
+                </div>
+              )}
+              <div className="group relative">
                 <button 
-                  onClick={() => setActiveTab('profile')}
+                  onClick={() => setActiveTab('network')}
                   className={`flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
-                    activeTab === 'profile' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
+                    activeTab === 'network' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  <UserIcon size={18} />
-                  <span>My Profile</span>
+                  <MessageSquare size={18} />
+                  <span>Network</span>
+                  {connections.filter(c => c.status === 'pending').length > 0 && (
+                    <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white">
+                      {connections.filter(c => c.status === 'pending').length}
+                    </span>
+                  )}
                 </button>
+                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                  Manage your connections and requests
+                </div>
+              </div>
+              <div className="group relative">
+                <button 
+                  onClick={() => setActiveTab('jobs')}
+                  className={`flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
+                    activeTab === 'jobs' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <ClipboardList size={18} />
+                  <span>Job Board</span>
+                </button>
+                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                  {profile.role === 'recruiter' ? 'Manage your job postings' : 'Discover open opportunities'}
+                </div>
+              </div>
+              {profile.role === 'professional' && (
+                <div className="group relative">
+                  <button 
+                    onClick={() => setActiveTab('insights')}
+                    className={`flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
+                      activeTab === 'insights' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Building2 size={18} />
+                    <span>Employer Insights</span>
+                  </button>
+                  <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                    Global company reviews and culture analysis
+                  </div>
+                </div>
               )}
-              <button 
-                onClick={() => setActiveTab('network')}
-                className={`flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
-                  activeTab === 'network' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <MessageSquare size={18} />
-                <span>Network</span>
-                {connections.filter(c => c.status === 'pending').length > 0 && (
-                  <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white">
-                    {connections.filter(c => c.status === 'pending').length}
-                  </span>
-                )}
-              </button>
-              <button 
-                onClick={() => setActiveTab('settings')}
-                className={`flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
-                  activeTab === 'settings' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <Settings size={18} />
-                <span>Settings</span>
-              </button>
+              <div className="group relative">
+                <button 
+                  onClick={() => setActiveTab('pricing')}
+                  className={`flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
+                    activeTab === 'pricing' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <CreditCard size={18} />
+                  <span>Plans & Billing</span>
+                </button>
+                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                  Manage your subscription and boosts
+                </div>
+              </div>
+              <div className="group relative">
+                <button 
+                  onClick={() => setActiveTab('settings')}
+                  className={`flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
+                    activeTab === 'settings' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Settings size={18} />
+                  <span>Settings</span>
+                </button>
+                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                  Manage your data privacy and account
+                </div>
+              </div>
             </div>
           </div>
 
@@ -285,6 +530,16 @@ export function Dashboard() {
                     </div>
                   </button>
                 ))}
+                
+                {!profile.isFeatured && (
+                  <button 
+                    onClick={() => setActiveTab('pricing')}
+                    className="w-full mt-4 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-sm font-bold hover:from-indigo-600 hover:to-purple-700 transition-all shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2"
+                  >
+                    <Zap size={16} />
+                    Boost My Profile
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -457,7 +712,12 @@ export function Dashboard() {
                               <UserIcon size={24} />
                             </div>
                             <div>
-                              <h3 className="font-bold text-slate-900">{p.displayName}</h3>
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-bold text-slate-900">{p.displayName}</h3>
+                                {p.isFeatured && (
+                                  <Zap size={14} className="text-indigo-500 fill-indigo-500" />
+                                )}
+                              </div>
                               <p className="text-xs text-slate-500">{p.headline || 'Professional'}</p>
                             </div>
                           </div>
@@ -488,6 +748,97 @@ export function Dashboard() {
                     ))
                   )}
                 </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'insights' && profile.role === 'professional' && (
+              <motion.div
+                key="insights"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <EmployerInsights />
+              </motion.div>
+            )}
+
+            {activeTab === 'jobs' && (
+              <motion.div
+                key="jobs"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-slate-900">
+                    {profile.role === 'recruiter' ? 'Manage Job Postings' : 'Open Opportunities'}
+                  </h2>
+                  {profile.role === 'recruiter' && (
+                    <button 
+                      onClick={() => setIsPostingJob(true)}
+                      className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-all"
+                    >
+                      <Plus size={18} />
+                      <span>Post a Job</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-6">
+                  {(profile.role === 'recruiter' ? jobs.filter(j => j.recruiterUid === user.uid) : jobs).length === 0 ? (
+                    <div className="rounded-3xl border-2 border-dashed border-slate-200 p-12 text-center">
+                      <div className="mx-auto h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-4">
+                        <ClipboardList size={32} />
+                      </div>
+                      <h3 className="text-lg font-bold text-slate-900">No jobs found</h3>
+                      <p className="text-slate-500">
+                        {profile.role === 'recruiter' 
+                          ? 'Start by posting your first job opportunity.' 
+                          : 'Check back later for new opportunities from top employers.'}
+                      </p>
+                    </div>
+                  ) : (
+                    (profile.role === 'recruiter' ? jobs.filter(j => j.recruiterUid === user.uid) : jobs).map((job) => (
+                      <div key={job.id} className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                        <div className="flex items-start justify-between mb-4">
+                          <div>
+                            <h3 className="text-xl font-bold text-slate-900">{job.title}</h3>
+                            <div className="flex items-center gap-3 mt-1 text-sm text-slate-500 font-medium">
+                              <span className="flex items-center gap-1"><Building2 size={14} /> {job.company}</span>
+                              <span className="flex items-center gap-1"><Search size={14} /> {job.location}</span>
+                              <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">{job.type}</span>
+                            </div>
+                          </div>
+                          {profile.role === 'professional' && (
+                            <button className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-all">
+                              Apply Now
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-600 line-clamp-3 mb-4">{job.description}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {job.requirements.map((req, i) => (
+                            <span key={i} className="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50 px-2 py-1 rounded">
+                              {req}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'pricing' && (
+              <motion.div
+                key="pricing"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <Pricing profile={profile} onUpgrade={handleUpgrade} />
               </motion.div>
             )}
 
@@ -596,6 +947,133 @@ export function Dashboard() {
                 >
                   Delete Forever
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+        {isPostingJob && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsPostingJob(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" 
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600">
+                    <Plus size={24} />
+                  </div>
+                  <h2 className="text-2xl font-bold text-slate-900">Post a New Job</h2>
+                </div>
+                <button onClick={() => setIsPostingJob(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-900">Job Title</label>
+                    <input 
+                      type="text"
+                      value={jobForm.title}
+                      onChange={(e) => setJobForm({ ...jobForm, title: e.target.value })}
+                      className="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="e.g. Senior Product Designer"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-900">Company Name</label>
+                    <input 
+                      type="text"
+                      value={jobForm.company}
+                      onChange={(e) => setJobForm({ ...jobForm, company: e.target.value })}
+                      className="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="e.g. TalentFabric"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-900">Location</label>
+                    <input 
+                      type="text"
+                      value={jobForm.location}
+                      onChange={(e) => setJobForm({ ...jobForm, location: e.target.value })}
+                      className="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="e.g. Berlin, Germany (Remote)"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-900">Job Type</label>
+                    <select 
+                      value={jobForm.type}
+                      onChange={(e) => setJobForm({ ...jobForm, type: e.target.value as JobPost['type'] })}
+                      className="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                    >
+                      <option value="full-time">Full-time</option>
+                      <option value="part-time">Part-time</option>
+                      <option value="contract">Contract</option>
+                      <option value="freelance">Freelance</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-900">Job Description</label>
+                  <textarea 
+                    value={jobForm.description}
+                    onChange={(e) => setJobForm({ ...jobForm, description: e.target.value })}
+                    className="w-full h-32 rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                    placeholder="Describe the role and your company culture..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-900">Requirements (comma separated)</label>
+                  <input 
+                    type="text"
+                    value={jobForm.requirements}
+                    onChange={(e) => setJobForm({ ...jobForm, requirements: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder="React, 5+ years experience, English C1..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-900">Salary Range (Optional)</label>
+                  <input 
+                    type="text"
+                    value={jobForm.salaryRange}
+                    onChange={(e) => setJobForm({ ...jobForm, salaryRange: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder="e.g. €60k - €80k"
+                  />
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                  <button 
+                    onClick={() => setIsPostingJob(false)}
+                    className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={postJob}
+                    className="flex-1 py-4 rounded-2xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+                  >
+                    Post Job Listing
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

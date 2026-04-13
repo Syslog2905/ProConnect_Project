@@ -63,7 +63,7 @@ export function GDPRConsent({ onComplete }: GDPRConsentProps) {
 
         <div className="space-y-6 mb-8">
           <p className="text-slate-600 leading-relaxed">
-            To provide our networking services, ProConnect needs your explicit consent to process your professional data. We are committed to protecting your privacy according to EU GDPR standards.
+            To provide our networking services, TalentFabric needs your explicit consent to process your professional data. We are committed to protecting your privacy at <span className="text-indigo-600 font-bold">talentfabric.eu</span> according to EU GDPR standards.
           </p>
           
           <div className="space-y-4">

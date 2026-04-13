@@ -16,6 +16,10 @@ export interface UserProfile {
   gdprConsent: boolean;
   consentDate: Timestamp | null;
   createdAt: Timestamp;
+  subscriptionTier?: 'free' | 'pro';
+  connectionCredits?: number;
+  isFeatured?: boolean;
+  featuredUntil?: Timestamp | null;
 }
 
 export interface Connection {
@@ -32,4 +36,19 @@ export interface Message {
   receiverUid: string;
   content: string;
   createdAt: Timestamp;
+}
+
+export interface JobPost {
+  id: string;
+  recruiterUid: string;
+  title: string;
+  company: string;
+  location: string;
+  description: string;
+  requirements: string[];
+  salaryRange?: string;
+  type: 'full-time' | 'part-time' | 'contract' | 'freelance';
+  status: 'active' | 'closed';
+  createdAt: Timestamp;
+  isFeatured?: boolean;
 }

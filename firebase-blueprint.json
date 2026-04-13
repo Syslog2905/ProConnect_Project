@@ -42,6 +42,26 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["senderUid", "receiverUid", "content"]
+    },
+    "JobPost": {
+      "title": "Job Post",
+      "description": "A job listing posted by a recruiter.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "recruiterUid": { "type": "string" },
+        "title": { "type": "string" },
+        "company": { "type": "string" },
+        "location": { "type": "string" },
+        "description": { "type": "string" },
+        "requirements": { "type": "array", "items": { "type": "string" } },
+        "salaryRange": { "type": "string" },
+        "type": { "type": "string", "enum": ["full-time", "part-time", "contract", "freelance"] },
+        "status": { "type": "string", "enum": ["active", "closed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isFeatured": { "type": "boolean" }
+      },
+      "required": ["id", "recruiterUid", "title", "company", "location", "description", "type", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -56,6 +76,10 @@
     "/messages/{messageId}": {
       "schema": "Message",
       "description": "Direct messages."
+    },
+    "/jobs/{jobId}": {
+      "schema": "JobPost",
+      "description": "Job listings."
     }
   }
 }

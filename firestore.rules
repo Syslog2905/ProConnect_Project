@@ -33,6 +33,22 @@
 //   - content: string (required) - Message text
 //   - createdAt: timestamp (required, immutable)
 //
+// Collection: jobs
+// Document ID: {jobId}
+// Fields:
+//   - id: string (required, immutable)
+//   - recruiterUid: string (required, immutable)
+//   - title: string (required)
+//   - company: string (required)
+//   - location: string (required)
+//   - description: string (required)
+//   - requirements: list (optional)
+//   - salaryRange: string (optional)
+//   - type: string (required) - 'full-time', 'part-time', 'contract', 'freelance'
+//   - status: string (required) - 'active', 'closed'
+//   - createdAt: timestamp (required, immutable)
+//   - isFeatured: bool (optional)
+//
 // ===============================================================
 
 rules_version = '2';
@@ -85,8 +101,9 @@ service cloud.firestore {
 
     match /users/{userId} {
       // Users can only read their own profile if it contains PII (email)
-      // For public profiles, we'd need a separate collection or denormalization
-      allow read: if isOwner(userId) || isAdmin();
+      // We allow listing profiles that are marked as active or passive for discovery
+      allow get: if isOwner(userId) || isAdmin() || resource.data.visibility in ['active', 'passive'];
+      allow list: if isAuthenticated() && resource.data.visibility in ['active', 'passive'];
       
       allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
                       (request.resource.data.role != 'admin' || isAdmin());
@@ -136,6 +153,21 @@ service cloud.firestore {
              data.createdAt is timestamp;
     }
 
+    function isValidJob(data) {
+      return data.id is string &&
+             data.recruiterUid is string &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.company is string && data.company.size() > 0 && data.company.size() < 100 &&
+             data.location is string && data.location.size() > 0 && data.location.size() < 100 &&
+             data.description is string && data.description.size() > 0 && data.description.size() < 10000 &&
+             data.type in ['full-time', 'part-time', 'contract', 'freelance'] &&
+             data.status in ['active', 'closed'] &&
+             data.createdAt is timestamp &&
+             (!('requirements' in data) || (data.requirements is list && data.requirements.size() <= 20)) &&
+             (!('salaryRange' in data) || (data.salaryRange is string && data.salaryRange.size() < 100)) &&
+             (!('isFeatured' in data) || (data.isFeatured is bool));
+    }
+
     match /messages/{messageId} {
       allow read: if isAuthenticated() && (isOwner(resource.data.senderUid) || isOwner(resource.data.receiverUid) || isAdmin());
       
@@ -145,6 +177,36 @@ service cloud.firestore {
       allow update: if false;
       
       allow delete: if isAuthenticated() && (isOwner(resource.data.senderUid) || isOwner(resource.data.receiverUid) || isAdmin());
+    }
+
+    // ===============================================================
+    // Jobs
+    // ===============================================================
+    
+    match /jobs/{jobId} {
+      // Anyone authenticated can read jobs
+      allow get: if request.auth != null;
+      allow list: if request.auth != null;
+      
+      // Only recruiters can create jobs
+      allow create: if request.auth != null && 
+                      request.resource.data.recruiterUid == request.auth.uid &&
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter' &&
+                      isValidJob(request.resource.data);
+      
+      // Only the recruiter who posted the job can update it
+      allow update: if request.auth != null && 
+                      resource.data.recruiterUid == request.auth.uid &&
+                      isValidJob(request.resource.data) &&
+                      request.resource.data.id == resource.data.id &&
+                      request.resource.data.recruiterUid == resource.data.recruiterUid &&
+                      request.resource.data.createdAt == resource.data.createdAt;
+      
+      // Only the recruiter or admin can delete
+      allow delete: if request.auth != null && 
+                      (resource.data.recruiterUid == request.auth.uid || 
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+                       request.auth.token.email == "gershuin2905@gmail.com");
     }
   }
 }

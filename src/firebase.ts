@@ -92,6 +92,8 @@ export async function signInWithGoogle() {
         gdprConsent: false,
         consentDate: null,
         createdAt: Timestamp.now(),
+        subscriptionTier: 'free',
+        connectionCredits: 3,
       };
       try {
         await setDoc(userRef, newProfile);
