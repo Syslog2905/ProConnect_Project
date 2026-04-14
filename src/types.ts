@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 
-export type UserRole = 'professional' | 'recruiter' | 'admin';
+export type UserRole = 'professional' | 'recruiter' | 'employer' | 'admin';
 export type VisibilityMode = 'active' | 'passive' | 'hidden';
 export type ConnectionStatus = 'pending' | 'accepted' | 'rejected';
 
@@ -20,6 +20,9 @@ export interface UserProfile {
   connectionCredits?: number;
   isFeatured?: boolean;
   featuredUntil?: Timestamp | null;
+  isFoundingMember?: boolean;
+  referralCode?: string;
+  referredBy?: string;
 }
 
 export interface Connection {
@@ -44,6 +47,8 @@ export interface JobPost {
   title: string;
   company: string;
   location: string;
+  industry: string;
+  category: string;
   description: string;
   requirements: string[];
   salaryRange?: string;
@@ -51,4 +56,5 @@ export interface JobPost {
   status: 'active' | 'closed';
   createdAt: Timestamp;
   isFeatured?: boolean;
+  isFoundingMember?: boolean;
 }

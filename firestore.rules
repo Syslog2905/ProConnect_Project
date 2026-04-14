@@ -11,11 +11,18 @@
 //   - headline: string (optional) - Professional headline
 //   - bio: string (optional) - Professional bio
 //   - skills: list (optional) - List of skills
-//   - role: string (required) - 'professional', 'recruiter', or 'admin'
+//   - role: string (required) - 'professional', 'recruiter', 'employer', or 'admin'
 //   - visibility: string (required) - 'active', 'passive', or 'hidden'
 //   - gdprConsent: bool (required) - Whether user has accepted GDPR terms
 //   - consentDate: timestamp (required) - When consent was given
 //   - createdAt: timestamp (required, immutable) - When profile was created
+//   - subscriptionTier: string (optional) - 'free' or 'pro'
+//   - connectionCredits: number (optional)
+//   - isFeatured: bool (optional)
+//   - featuredUntil: timestamp (optional)
+//   - isFoundingMember: bool (optional)
+//   - referralCode: string (optional)
+//   - referredBy: string (optional)
 //
 // Collection: connections
 // Document ID: {connectionId}
@@ -41,6 +48,8 @@
 //   - title: string (required)
 //   - company: string (required)
 //   - location: string (required)
+//   - industry: string (required)
+//   - category: string (required)
 //   - description: string (required)
 //   - requirements: list (optional)
 //   - salaryRange: string (optional)
@@ -77,8 +86,9 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-         (request.auth.token.email == "gershuin2905@gmail.com" && request.auth.token.email_verified == true));
+        ((request.auth.token.email == "gershuin2905@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
 
     // ===============================================================
@@ -88,7 +98,7 @@ service cloud.firestore {
     function isValidUser(data) {
       return data.uid is string &&
              data.email is string && isValidEmail(data.email) &&
-             data.role in ['professional', 'recruiter', 'admin'] &&
+             data.role in ['professional', 'recruiter', 'employer', 'admin'] &&
              data.visibility in ['active', 'passive', 'hidden'] &&
              data.gdprConsent is bool &&
              (data.consentDate is timestamp || (data.gdprConsent == false && data.consentDate == null)) &&
@@ -96,7 +106,14 @@ service cloud.firestore {
              (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
              (!('headline' in data) || (data.headline is string && data.headline.size() < 200)) &&
              (!('bio' in data) || (data.bio is string && data.bio.size() < 2000)) &&
-             (!('skills' in data) || (data.skills is list && data.skills.size() <= 50));
+             (!('skills' in data) || (data.skills is list && data.skills.size() <= 50)) &&
+             (!('subscriptionTier' in data) || (data.subscriptionTier in ['free', 'pro'])) &&
+             (!('connectionCredits' in data) || (data.connectionCredits is number)) &&
+             (!('isFeatured' in data) || (data.isFeatured is bool)) &&
+             (!('featuredUntil' in data) || (data.featuredUntil is timestamp || data.featuredUntil == null)) &&
+             (!('isFoundingMember' in data) || (data.isFoundingMember is bool)) &&
+             (!('referralCode' in data) || (data.referralCode is string)) &&
+             (!('referredBy' in data) || (data.referredBy is string || data.referredBy == null));
     }
 
     match /users/{userId} {
@@ -106,7 +123,8 @@ service cloud.firestore {
       allow list: if isAuthenticated() && resource.data.visibility in ['active', 'passive'];
       
       allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
-                      (request.resource.data.role != 'admin' || isAdmin());
+                      (request.resource.data.role != 'admin' || 
+                       (request.auth.token.email == "gershuin2905@gmail.com" && request.auth.token.email_verified == true));
       
       allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
                       request.resource.data.role == resource.data.role &&
@@ -159,13 +177,16 @@ service cloud.firestore {
              data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
              data.company is string && data.company.size() > 0 && data.company.size() < 100 &&
              data.location is string && data.location.size() > 0 && data.location.size() < 100 &&
+             data.industry is string && data.industry.size() > 0 && data.industry.size() < 100 &&
+             data.category is string && data.category.size() > 0 && data.category.size() < 100 &&
              data.description is string && data.description.size() > 0 && data.description.size() < 10000 &&
              data.type in ['full-time', 'part-time', 'contract', 'freelance'] &&
              data.status in ['active', 'closed'] &&
              data.createdAt is timestamp &&
              (!('requirements' in data) || (data.requirements is list && data.requirements.size() <= 20)) &&
              (!('salaryRange' in data) || (data.salaryRange is string && data.salaryRange.size() < 100)) &&
-             (!('isFeatured' in data) || (data.isFeatured is bool));
+             (!('isFeatured' in data) || (data.isFeatured is bool)) &&
+             (!('isFoundingMember' in data) || (data.isFoundingMember is bool));
     }
 
     match /messages/{messageId} {
@@ -188,10 +209,10 @@ service cloud.firestore {
       allow get: if request.auth != null;
       allow list: if request.auth != null;
       
-      // Only recruiters can create jobs
+      // Only recruiters or employers can create jobs
       allow create: if request.auth != null && 
                       request.resource.data.recruiterUid == request.auth.uid &&
-                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter' &&
+                      (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['recruiter', 'employer']) &&
                       isValidJob(request.resource.data);
       
       // Only the recruiter who posted the job can update it

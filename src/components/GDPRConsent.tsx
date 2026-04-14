@@ -8,7 +8,7 @@ import {
   handleFirestoreError,
   OperationType
 } from '../firebase';
-import { Shield, Check, ArrowRight, Briefcase, User } from 'lucide-react';
+import { Shield, Check, ArrowRight, Briefcase, User, Building2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { UserRole } from '../types';
 
@@ -69,7 +69,7 @@ export function GDPRConsent({ onComplete, initialProfile }: GDPRConsentProps) {
           
           <div className="space-y-4">
             <label className="text-sm font-bold text-slate-900 block">Select your primary role:</label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <button
                 onClick={() => setRole('professional')}
                 className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all ${
@@ -82,8 +82,8 @@ export function GDPRConsent({ onComplete, initialProfile }: GDPRConsentProps) {
                   <User size={20} />
                 </div>
                 <div className="text-left">
-                  <p className="font-bold text-sm">Professional</p>
-                  <p className="text-[10px] opacity-70">I want to be discovered by recruiters</p>
+                  <p className="font-bold text-xs">Talent</p>
+                  <p className="text-[9px] opacity-70">I want to be discovered</p>
                 </div>
               </button>
               <button
@@ -98,8 +98,24 @@ export function GDPRConsent({ onComplete, initialProfile }: GDPRConsentProps) {
                   <Briefcase size={20} />
                 </div>
                 <div className="text-left">
-                  <p className="font-bold text-sm">Recruiter</p>
-                  <p className="text-[10px] opacity-70">I am looking for top talent</p>
+                  <p className="font-bold text-xs">Recruiter</p>
+                  <p className="text-[9px] opacity-70">I am a headhunter/HR</p>
+                </div>
+              </button>
+              <button
+                onClick={() => setRole('employer')}
+                className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all ${
+                  role === 'employer' 
+                    ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
+                    : 'border-slate-100 bg-slate-50 text-slate-600 hover:border-slate-200'
+                }`}
+              >
+                <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${role === 'employer' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                  <Building2 size={20} />
+                </div>
+                <div className="text-left">
+                  <p className="font-bold text-xs">Employer</p>
+                  <p className="text-[9px] opacity-70">I am hiring for my company</p>
                 </div>
               </button>
             </div>

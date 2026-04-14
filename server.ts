@@ -42,6 +42,36 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
+  // Test Lemon Squeezy Connection
+  app.get("/api/test-lemon-connection", async (req, res) => {
+    try {
+      const storeId = process.env.LEMON_SQUEEZY_STORE_ID;
+      const apiKey = process.env.LEMON_SQUEEZY_API_KEY;
+
+      if (!storeId || !apiKey) {
+        return res.status(400).json({ error: "Missing Store ID or API Key in Secrets" });
+      }
+
+      console.log("Testing connection for Store ID:", storeId);
+      // In v4.x, we can try to fetch the store
+      const { data, error } = await createCheckout(Number(storeId), "0", {
+        checkoutData: { email: "test@example.com" }
+      }).catch(err => ({ error: err }));
+
+      // If it's unauthorized, the error will tell us
+      if (error && error.message.includes("Unauthorized")) {
+        return res.status(401).json({ 
+          error: "Unauthorized", 
+          details: "The API Key does not have access to this Store ID. Ensure you are using the correct key for this specific store." 
+        });
+      }
+
+      res.json({ status: "Connected (API Key is valid for this account)" });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Connection test failed" });
+    }
+  });
+
   // Create Lemon Squeezy Checkout
   app.post("/api/create-checkout", async (req, res) => {
     const { variantId, userId, userEmail, returnUrl } = req.body;
@@ -57,15 +87,21 @@ async function startServer() {
       const storeId = process.env.LEMON_SQUEEZY_STORE_ID || "";
       
       if (!apiKey) {
-        console.error("CRITICAL: LEMON_SQUEEZY_API_KEY is missing from environment variables.");
+        console.error("CRITICAL: LEMON_SQUEEZY_API_KEY is missing.");
         return res.status(500).json({ error: "Server configuration error: Missing API Key" });
       }
 
-      console.log("Attempting checkout with:", { storeId, variantId, keySnippet: apiKey.slice(0, 4) + "..." });
+      if (!storeId) {
+        console.error("CRITICAL: LEMON_SQUEEZY_STORE_ID is missing.");
+        return res.status(500).json({ error: "Server configuration error: Missing Store ID. Check your Secrets." });
+      }
+
+      const isTestKey = apiKey.startsWith('ls_t_');
+      console.log(`Attempting checkout with ${isTestKey ? 'TEST' : 'LIVE'} key:`, { storeId, variantId, keySnippet: apiKey.slice(0, 8) + "..." });
       
       const { data, error } = await createCheckout(
-        storeId,
-        variantId,
+        Number(storeId),
+        Number(variantId),
         {
           checkoutData: {
             email: userEmail,
@@ -82,7 +118,11 @@ async function startServer() {
       if (error) {
         console.error("Lemon Squeezy API Error:", error);
         if (error.message.includes("Unauthorized")) {
-          return res.status(401).json({ error: "Lemon Squeezy API Key is invalid or unauthorized for this store. Check your Secrets." });
+          const isTestKey = apiKey.startsWith('ls_t_');
+          return res.status(401).json({ 
+            error: `Lemon Squeezy API Key (${isTestKey ? 'TEST' : 'LIVE'}) is invalid or unauthorized for Store ID ${storeId}. ` +
+                   `Ensure your Store ID is correct and your API Key matches your store's environment (Test vs Live).`
+          });
         }
         if (error.message.includes("Not Found")) {
           return res.status(404).json({ error: `Variant ID ${variantId} not found. Make sure you are using the 7-digit Variant ID, not the 6-digit Product ID.` });

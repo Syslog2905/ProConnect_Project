@@ -37,7 +37,8 @@ import {
   Zap,
   Crown,
   CreditCard,
-  ClipboardList
+  ClipboardList,
+  Copy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, Connection, ConnectionStatus, JobPost } from '../types';
@@ -50,7 +51,7 @@ export function Dashboard() {
   const [user] = useAuthState(auth);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [activeTab, setActiveTab] = useState<Tab>(profile?.role === 'recruiter' ? 'discovery' : 'profile');
+  const [activeTab, setActiveTab] = useState<Tab>((profile?.role === 'recruiter' || profile?.role === 'employer') ? 'discovery' : 'profile');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   // Discovery state
@@ -65,6 +66,8 @@ export function Dashboard() {
     company: '',
     location: '',
     type: 'full-time' as JobPost['type'],
+    industry: '',
+    category: '',
     description: '',
     requirements: '',
     salaryRange: ''
@@ -72,6 +75,8 @@ export function Dashboard() {
   
   // Profile edit state
   const [isEditing, setIsEditing] = useState(false);
+  const [isUpgrading, setIsUpgrading] = useState(false);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     headline: '',
     bio: '',
@@ -93,7 +98,7 @@ export function Dashboard() {
         });
         // Default tab based on role if just loaded
         if (!profile) {
-          setActiveTab(data.role === 'recruiter' ? 'discovery' : 'network');
+          setActiveTab((data.role === 'recruiter' || data.role === 'employer') ? 'discovery' : 'network');
         }
       }
     }, (error) => handleFirestoreError(error, OperationType.GET, `users/${user.uid}`));
@@ -171,12 +176,15 @@ export function Dashboard() {
         title: jobForm.title,
         company: jobForm.company,
         location: jobForm.location,
+        industry: jobForm.industry,
+        category: jobForm.category,
         type: jobForm.type,
         description: jobForm.description,
         requirements: jobForm.requirements.split(',').map(r => r.trim()).filter(r => r !== ''),
         salaryRange: jobForm.salaryRange,
         status: 'active',
-        createdAt: Timestamp.now()
+        createdAt: Timestamp.now(),
+        isFoundingMember: profile.isFoundingMember
       };
       await setDoc(doc(db, 'jobs', jobId), newJob);
       setIsPostingJob(false);
@@ -184,6 +192,8 @@ export function Dashboard() {
         title: '',
         company: '',
         location: '',
+        industry: '',
+        category: '',
         type: 'full-time',
         description: '',
         requirements: '',
@@ -229,7 +239,7 @@ export function Dashboard() {
       });
 
       // Deduct credit if applicable
-      if (profile.role === 'recruiter' && profile.subscriptionTier !== 'pro') {
+      if ((profile.role === 'recruiter' || profile.role === 'employer') && profile.subscriptionTier !== 'pro') {
         await setDoc(doc(db, 'users', user.uid), {
           ...profile,
           connectionCredits: (profile.connectionCredits || 1) - 1
@@ -244,6 +254,8 @@ export function Dashboard() {
 
   const handleUpgrade = async (tier: 'pro' | 'free') => {
     if (!user || !profile) return;
+    setIsUpgrading(true);
+    setUpgradeError(null);
 
     // If it's a downgrade or cancellation, we can handle it directly in Firestore for now
     // (In a real app, you'd cancel the subscription in Lemon Squeezy via API)
@@ -255,10 +267,11 @@ export function Dashboard() {
           featuredUntil: null,
         };
         await setDoc(doc(db, 'users', user.uid), { ...profile, ...updates });
-        alert("Subscription updated successfully.");
+        setIsUpgrading(false);
         return;
       } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+        setIsUpgrading(false);
         return;
       }
     }
@@ -267,15 +280,17 @@ export function Dashboard() {
     try {
       console.log("Starting upgrade process for tier:", tier, "Role:", profile.role);
       
-      const variantId = profile.role === 'recruiter' 
+      const variantId = (profile.role === 'recruiter' || profile.role === 'employer')
         ? import.meta.env.VITE_LEMON_SQUEEZY_PRO_PLAN_VARIANT_ID 
         : import.meta.env.VITE_LEMON_SQUEEZY_FEATURED_BOOST_VARIANT_ID;
 
       console.log("Selected Variant ID:", variantId);
 
       if (!variantId) {
-        console.error("Missing Variant ID for role:", profile.role);
-        alert(`Configuration error: Missing Variant ID for ${profile.role}. Please check your Secrets.`);
+        const errorMsg = `Configuration error: Missing Variant ID for ${profile.role}. Please check your Secrets.`;
+        console.error(errorMsg);
+        setUpgradeError(errorMsg);
+        setIsUpgrading(false);
         return;
       }
 
@@ -304,7 +319,9 @@ export function Dashboard() {
       }
     } catch (error) {
       console.error("Checkout error:", error);
-      alert(`Failed to start checkout: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setUpgradeError(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setIsUpgrading(false);
     }
   };
 
@@ -353,8 +370,11 @@ export function Dashboard() {
               </div>
               <h2 className="text-xl font-bold text-slate-900 flex items-center justify-center gap-2">
                 {profile.displayName}
-                {profile.subscriptionTier === 'pro' && profile.role === 'recruiter' && (
-                  <Crown size={18} className="text-amber-500" title="Pro Recruiter" />
+                {profile.isFoundingMember && (
+                  <Shield size={18} className="text-indigo-600" title="Founding Partner" />
+                )}
+                {profile.subscriptionTier === 'pro' && (profile.role === 'recruiter' || profile.role === 'employer') && (
+                  <Crown size={18} className="text-amber-500" title="Pro Business" />
                 )}
                 {profile.isFeatured && profile.role === 'professional' && (
                   <Zap size={18} className="text-indigo-500" title="Featured Professional" />
@@ -367,7 +387,7 @@ export function Dashboard() {
               <p className="text-sm text-slate-500">{profile.headline || 'Professional Expert'}</p>
             </div>
             
-            {profile.role === 'recruiter' && profile.subscriptionTier !== 'pro' && (
+            {(profile.role === 'recruiter' || profile.role === 'employer') && profile.subscriptionTier !== 'pro' && (
               <div className="mt-6 p-4 rounded-2xl bg-indigo-50 border border-indigo-100">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Connection Credits</span>
@@ -388,9 +408,35 @@ export function Dashboard() {
                 </button>
               </div>
             )}
+
+            {/* Referral Section */}
+            <div className="mt-6 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+              <div className="flex items-center gap-2 mb-2">
+                <UserPlus size={16} className="text-indigo-600" />
+                <span className="text-xs font-bold text-slate-900">Refer & Earn</span>
+              </div>
+              <p className="text-[10px] text-slate-500 mb-3">
+                Share your code. When a friend joins, you both get 1 month of Pro!
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-indigo-600">
+                  {profile.referralCode || 'TF-XXXX'}
+                </code>
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(profile.referralCode || '');
+                    alert('Referral code copied!');
+                  }}
+                  className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 transition-colors"
+                  title="Copy Referral Code"
+                >
+                  <Copy size={14} />
+                </button>
+              </div>
+            </div>
             
             <div className="mt-8 space-y-2">
-              {profile.role === 'recruiter' && (
+              {(profile.role === 'recruiter' || profile.role === 'employer') && (
                 <div className="group relative">
                   <button 
                     onClick={() => setActiveTab('discovery')}
@@ -452,10 +498,10 @@ export function Dashboard() {
                   <span>Job Board</span>
                 </button>
                 <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                  {profile.role === 'recruiter' ? 'Manage your job postings' : 'Discover open opportunities'}
+                  {(profile.role === 'recruiter' || profile.role === 'employer') ? 'Manage your job postings' : 'Discover open opportunities'}
                 </div>
               </div>
-              {profile.role === 'professional' && (
+              {(profile.role === 'professional' || profile.role === 'recruiter') && (
                 <div className="group relative">
                   <button 
                     onClick={() => setActiveTab('insights')}
@@ -751,7 +797,7 @@ export function Dashboard() {
               </motion.div>
             )}
 
-            {activeTab === 'insights' && profile.role === 'professional' && (
+            {activeTab === 'insights' && (profile.role === 'professional' || profile.role === 'recruiter') && (
               <motion.div
                 key="insights"
                 initial={{ opacity: 0, y: 10 }}
@@ -772,9 +818,9 @@ export function Dashboard() {
               >
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-slate-900">
-                    {profile.role === 'recruiter' ? 'Manage Job Postings' : 'Open Opportunities'}
+                    {(profile.role === 'recruiter' || profile.role === 'employer') ? 'Manage Job Postings' : 'Open Opportunities'}
                   </h2>
-                  {profile.role === 'recruiter' && (
+                  {(profile.role === 'recruiter' || profile.role === 'employer') && (
                     <button 
                       onClick={() => setIsPostingJob(true)}
                       className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-all"
@@ -786,28 +832,37 @@ export function Dashboard() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-6">
-                  {(profile.role === 'recruiter' ? jobs.filter(j => j.recruiterUid === user.uid) : jobs).length === 0 ? (
+                  {((profile.role === 'recruiter' || profile.role === 'employer') ? jobs.filter(j => j.recruiterUid === user.uid) : jobs).length === 0 ? (
                     <div className="rounded-3xl border-2 border-dashed border-slate-200 p-12 text-center">
                       <div className="mx-auto h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-4">
                         <ClipboardList size={32} />
                       </div>
                       <h3 className="text-lg font-bold text-slate-900">No jobs found</h3>
                       <p className="text-slate-500">
-                        {profile.role === 'recruiter' 
+                        {(profile.role === 'recruiter' || profile.role === 'employer')
                           ? 'Start by posting your first job opportunity.' 
                           : 'Check back later for new opportunities from top employers.'}
                       </p>
                     </div>
                   ) : (
-                    (profile.role === 'recruiter' ? jobs.filter(j => j.recruiterUid === user.uid) : jobs).map((job) => (
+                    ((profile.role === 'recruiter' || profile.role === 'employer') ? jobs.filter(j => j.recruiterUid === user.uid) : jobs).map((job) => (
                       <div key={job.id} className="rounded-3xl bg-white p-6 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
                         <div className="flex items-start justify-between mb-4">
                           <div>
-                            <h3 className="text-xl font-bold text-slate-900">{job.title}</h3>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-xl font-bold text-slate-900">{job.title}</h3>
+                              {job.isFoundingMember && (
+                                <Shield size={16} className="text-indigo-600" title="Founding Partner" />
+                              )}
+                            </div>
                             <div className="flex items-center gap-3 mt-1 text-sm text-slate-500 font-medium">
                               <span className="flex items-center gap-1"><Building2 size={14} /> {job.company}</span>
                               <span className="flex items-center gap-1"><Search size={14} /> {job.location}</span>
                               <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">{job.type}</span>
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                              <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold">{job.industry}</span>
+                              <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold">{job.category}</span>
                             </div>
                           </div>
                           {profile.role === 'professional' && (
@@ -838,7 +893,12 @@ export function Dashboard() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
               >
-                <Pricing profile={profile} onUpgrade={handleUpgrade} />
+                <Pricing 
+                  profile={profile} 
+                  onUpgrade={handleUpgrade} 
+                  isUpgrading={isUpgrading}
+                  error={upgradeError}
+                />
               </motion.div>
             )}
 
@@ -999,6 +1059,46 @@ export function Dashboard() {
                       className="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                       placeholder="e.g. TalentFabric"
                     />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-900">Industry</label>
+                    <select 
+                      value={jobForm.industry}
+                      onChange={(e) => setJobForm({ ...jobForm, industry: e.target.value })}
+                      className="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                      required
+                    >
+                      <option value="">Select Industry</option>
+                      <option value="Technology">Technology</option>
+                      <option value="Finance">Finance</option>
+                      <option value="Healthcare">Healthcare</option>
+                      <option value="Education">Education</option>
+                      <option value="Manufacturing">Manufacturing</option>
+                      <option value="Retail">Retail</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-900">Role Category</label>
+                    <select 
+                      value={jobForm.category}
+                      onChange={(e) => setJobForm({ ...jobForm, category: e.target.value })}
+                      className="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                      required
+                    >
+                      <option value="">Select Category</option>
+                      <option value="Engineering">Engineering</option>
+                      <option value="Design">Design</option>
+                      <option value="Marketing">Marketing</option>
+                      <option value="Sales">Sales</option>
+                      <option value="Customer Support">Customer Support</option>
+                      <option value="Human Resources">Human Resources</option>
+                      <option value="Management">Management</option>
+                      <option value="Other">Other</option>
+                    </select>
                   </div>
                 </div>
 

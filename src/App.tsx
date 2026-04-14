@@ -27,20 +27,7 @@ export default function App() {
   const [user, loading] = useAuthState(auth);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [currentView, setCurrentView] = useState<View>('home');
-
-  const handleHeroAction = async () => {
-    if (isLoggingIn) return;
-    setIsLoggingIn(true);
-    try {
-      await signInWithGoogle();
-    } catch (err) {
-      // Error handled in helper
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
 
   useEffect(() => {
     if (!user) {
@@ -107,31 +94,28 @@ export default function App() {
                   <span>GDPR Compliant by Design</span>
                 </div>
                 <h1 className="text-5xl font-extrabold tracking-tight text-slate-900 sm:text-6xl">
-                  Connect with Top <span className="text-indigo-600">HR & Headhunters</span>
+                  Connect with Top <span className="text-indigo-600">Professionals, Headhunters and Employers</span>
                 </h1>
                 <p className="mt-6 text-lg leading-8 text-slate-600 max-w-xl">
                   TalentFabric is the secure bridge between industry experts and recruitment professionals. 
                   Showcase your expertise while maintaining full control over your personal data.
                 </p>
-                <div className="mt-10 flex flex-wrap items-center gap-4">
-                  <button 
-                    onClick={handleHeroAction}
-                    disabled={isLoggingIn}
-                    className="flex items-center gap-2 rounded-xl bg-slate-900 px-8 py-4 text-base font-semibold text-white shadow-xl hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
-                  >
-                    {isLoggingIn ? (
-                      <Loader2 size={20} className="animate-spin" />
-                    ) : (
-                      <>Create Profile <ArrowRight size={20} /></>
-                    )}
-                  </button>
-                  <button 
-                    onClick={handleHeroAction}
-                    disabled={isLoggingIn}
-                    className="rounded-xl border border-slate-200 bg-white px-8 py-4 text-base font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
-                  >
-                    {isLoggingIn ? 'Signing In...' : 'For Recruiters'}
-                  </button>
+                <div className="mt-10 flex flex-wrap items-center gap-3">
+                  <Auth 
+                    defaultRole="professional"
+                    buttonText="For Employee"
+                    className="rounded-xl border border-slate-200 bg-white px-6 py-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all active:scale-95"
+                  />
+                  <Auth 
+                    defaultRole="recruiter"
+                    buttonText="For Recruiters"
+                    className="rounded-xl border border-slate-200 bg-white px-6 py-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all active:scale-95"
+                  />
+                  <Auth 
+                    defaultRole="employer"
+                    buttonText="For Employers"
+                    className="rounded-xl border border-slate-200 bg-white px-6 py-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all active:scale-95"
+                  />
                 </div>
               </motion.div>
 

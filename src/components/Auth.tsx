@@ -9,17 +9,25 @@ import {
   createProfile
 } from '../firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { LogIn, LogOut, User, Loader2, Mail, Lock, X, Briefcase, UserCircle } from 'lucide-react';
+import { LogIn, LogOut, User, Loader2, Mail, Lock, X, Briefcase, UserCircle, Building2, UserPlus } from 'lucide-react';
+import { UserRole } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 
-export function Auth() {
+interface AuthProps {
+  defaultRole?: UserRole;
+  buttonText?: string;
+  className?: string;
+}
+
+export function Auth({ defaultRole, buttonText, className }: AuthProps) {
   const [user, loading] = useAuthState(auth);
   const [showModal, setShowModal] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
-  const [role, setRole] = useState<'professional' | 'recruiter'>('professional');
+  const [role, setRole] = useState<UserRole>(defaultRole || 'professional');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -27,7 +35,7 @@ export function Auth() {
     setIsProcessing(true);
     setError('');
     try {
-      await signInWithGoogle();
+      await signInWithGoogle(role, referralCode);
       setShowModal(false);
     } catch (err: any) {
       setError(err.message || 'Google sign in failed');
@@ -48,7 +56,7 @@ export function Auth() {
         if (!displayName) throw new Error('Display name is required');
         const result = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(result.user, { displayName });
-        await createProfile(result.user, role);
+        await createProfile(result.user, role, referralCode, displayName);
       }
       setShowModal(false);
       resetForm();
@@ -63,6 +71,7 @@ export function Auth() {
     setEmail('');
     setPassword('');
     setDisplayName('');
+    setReferralCode('');
     setError('');
   };
 
@@ -101,11 +110,14 @@ export function Auth() {
   return (
     <>
       <button 
-        onClick={() => setShowModal(true)}
-        className="flex items-center gap-2 rounded-full bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-md hover:bg-indigo-700 transition-all active:scale-95"
+        onClick={() => {
+          if (defaultRole) setRole(defaultRole);
+          setShowModal(true);
+        }}
+        className={className || "flex items-center gap-2 rounded-full bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-md hover:bg-indigo-700 transition-all active:scale-95"}
       >
         <LogIn size={16} />
-        <span>Sign In</span>
+        <span>{buttonText || 'Sign In'}</span>
       </button>
 
       <AnimatePresence>
@@ -134,29 +146,46 @@ export function Auth() {
               </div>
 
               {!isLogin && (
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <button
-                    onClick={() => setRole('professional')}
-                    className={`flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all ${
-                      role === 'professional' 
-                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
-                        : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
-                    }`}
-                  >
-                    <UserCircle size={24} />
-                    <span className="text-xs font-bold">Professional</span>
-                  </button>
-                  <button
-                    onClick={() => setRole('recruiter')}
-                    className={`flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all ${
-                      role === 'recruiter' 
-                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
-                        : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
-                    }`}
-                  >
-                    <Briefcase size={24} />
-                    <span className="text-xs font-bold">Recruiter</span>
-                  </button>
+                <div className="space-y-3 mb-6">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest text-center">I am joining as a:</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setRole('professional')}
+                      className={`flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all ${
+                        role === 'professional' 
+                          ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
+                          : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
+                      }`}
+                    >
+                      <UserCircle size={20} />
+                      <span className="text-[10px] font-bold">Talent</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRole('recruiter')}
+                      className={`flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all ${
+                        role === 'recruiter' 
+                          ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
+                          : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
+                      }`}
+                    >
+                      <Briefcase size={20} />
+                      <span className="text-[10px] font-bold">Recruiter</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRole('employer')}
+                      className={`flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all ${
+                        role === 'employer' 
+                          ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
+                          : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
+                      }`}
+                    >
+                      <Building2 size={20} />
+                      <span className="text-[10px] font-bold">Employer</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -196,6 +225,19 @@ export function Auth() {
                     className="w-full rounded-2xl border border-slate-200 pl-12 pr-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                   />
                 </div>
+
+                {!isLogin && (
+                  <div className="relative">
+                    <UserPlus className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                      type="text"
+                      placeholder="Referral Code (Optional)"
+                      value={referralCode}
+                      onChange={(e) => setReferralCode(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 pl-12 pr-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                    />
+                  </div>
+                )}
 
                 {error && (
                   <p className="text-xs text-red-500 font-medium px-2">{error}</p>
