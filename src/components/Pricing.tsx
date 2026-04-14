@@ -125,20 +125,41 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
             <p className="font-medium">{error}</p>
           </div>
           {error.includes("Unauthorized") && (
-            <button 
-              onClick={async () => {
-                try {
-                  const res = await fetch('/api/test-lemon-connection');
-                  const data = await res.json();
-                  alert(data.status || data.details || data.error);
-                } catch (e) {
-                  alert("Connection test failed. Check console.");
-                }
-              }}
-              className="text-xs bg-white border border-red-200 px-3 py-1 rounded-lg hover:bg-red-100 transition-colors w-fit"
-            >
-              Test Connection
-            </button>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <button 
+                  onClick={async () => {
+                    try {
+                      const res = await fetch('/api/test-lemon-connection');
+                      const data = await res.json();
+                      alert(data.status || data.details || data.error);
+                    } catch (e) {
+                      alert("Connection test failed. Check console.");
+                    }
+                  }}
+                  className="text-xs bg-white border border-red-200 px-3 py-1 rounded-lg hover:bg-red-100 transition-colors w-fit"
+                >
+                  Test Connection
+                </button>
+                <button 
+                  onClick={async () => {
+                    try {
+                      const res = await fetch('/api/debug-config');
+                      const data = await res.json();
+                      alert(JSON.stringify(data, null, 2));
+                    } catch (e) {
+                      alert("Debug fetch failed.");
+                    }
+                  }}
+                  className="text-xs bg-white border border-red-200 px-3 py-1 rounded-lg hover:bg-red-100 transition-colors w-fit"
+                >
+                  View Debug Info
+                </button>
+              </div>
+              <p className="text-[10px] opacity-70">
+                Note: If your key starts with 'eyJ', it's a JWT. Lemon Squeezy API keys usually start with 'ls_'.
+              </p>
+            </div>
           )}
         </motion.div>
       )}
