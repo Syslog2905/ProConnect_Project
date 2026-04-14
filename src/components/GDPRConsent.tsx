@@ -14,11 +14,12 @@ import { UserRole } from '../types';
 
 interface GDPRConsentProps {
   onComplete: () => void;
+  initialProfile: any | null;
 }
 
-export function GDPRConsent({ onComplete }: GDPRConsentProps) {
+export function GDPRConsent({ onComplete, initialProfile }: GDPRConsentProps) {
   const [loading, setLoading] = useState(false);
-  const [role, setRole] = useState<UserRole>('professional');
+  const [role, setRole] = useState<UserRole>(initialProfile?.role || 'professional');
 
   const handleAccept = async () => {
     if (!auth.currentUser) return;

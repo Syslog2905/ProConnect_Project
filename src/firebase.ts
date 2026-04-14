@@ -1,5 +1,13 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile
+} from 'firebase/auth';
 import { 
   getFirestore, 
   doc, 
@@ -63,6 +71,37 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Shared Login Helper
 let isSigningIn = false;
 
+export async function createProfile(user: any, role: 'professional' | 'recruiter' = 'professional') {
+  const userRef = doc(db, 'users', user.uid);
+  const userSnap = await getDoc(userRef);
+  
+  if (!userSnap.exists()) {
+    console.log('Creating new user profile...');
+    const newProfile = {
+      uid: user.uid,
+      displayName: user.displayName,
+      email: user.email,
+      role: role,
+      visibility: role === 'professional' ? 'passive' : 'active',
+      gdprConsent: false,
+      consentDate: null,
+      createdAt: Timestamp.now(),
+      subscriptionTier: 'free',
+      connectionCredits: 3,
+    };
+    try {
+      await setDoc(userRef, newProfile);
+      console.log('Profile created successfully');
+      return newProfile;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}`);
+    }
+  } else {
+    console.log('User profile already exists');
+    return userSnap.data();
+  }
+}
+
 export async function signInWithGoogle() {
   if (isSigningIn) {
     console.log('Login already in progress, ignoring request');
@@ -77,33 +116,7 @@ export async function signInWithGoogle() {
     const user = result.user;
     console.log('User signed in:', user.uid);
     
-    // Check if user profile exists
-    const userRef = doc(db, 'users', user.uid);
-    const userSnap = await getDoc(userRef);
-    
-    if (!userSnap.exists()) {
-      console.log('Creating new user profile...');
-      const newProfile = {
-        uid: user.uid,
-        displayName: user.displayName,
-        email: user.email,
-        role: 'professional',
-        visibility: 'passive',
-        gdprConsent: false,
-        consentDate: null,
-        createdAt: Timestamp.now(),
-        subscriptionTier: 'free',
-        connectionCredits: 3,
-      };
-      try {
-        await setDoc(userRef, newProfile);
-        console.log('Profile created successfully');
-      } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}`);
-      }
-    } else {
-      console.log('User profile already exists');
-    }
+    await createProfile(user);
     return user;
   } catch (err: any) {
     if (err.code === 'auth/cancelled-popup-request') {
@@ -144,5 +157,8 @@ export {
   where, 
   onSnapshot,
   Timestamp,
-  serverTimestamp
+  serverTimestamp,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile
 };

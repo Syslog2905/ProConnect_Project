@@ -332,7 +332,7 @@ export default function App() {
 
       <AnimatePresence mode="wait">
         {showOnboarding && (
-          <GDPRConsent onComplete={() => {}} />
+          <GDPRConsent onComplete={() => {}} initialProfile={profile} />
         )}
       </AnimatePresence>
 
