@@ -501,7 +501,7 @@ export function Dashboard() {
                   {(profile.role === 'recruiter' || profile.role === 'employer') ? 'Manage your job postings' : 'Discover open opportunities'}
                 </div>
               </div>
-              {(profile.role === 'professional' || profile.role === 'recruiter') && (
+              {(profile.role === 'professional' || profile.role === 'recruiter' || profile.role === 'employer') && (
                 <div className="group relative">
                   <button 
                     onClick={() => setActiveTab('insights')}
@@ -797,7 +797,7 @@ export function Dashboard() {
               </motion.div>
             )}
 
-            {activeTab === 'insights' && (profile.role === 'professional' || profile.role === 'recruiter') && (
+            {activeTab === 'insights' && (profile.role === 'professional' || profile.role === 'recruiter' || profile.role === 'employer') && (
               <motion.div
                 key="insights"
                 initial={{ opacity: 0, y: 10 }}

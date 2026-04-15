@@ -62,6 +62,27 @@
         "isFeatured": { "type": "boolean" }
       },
       "required": ["id", "recruiterUid", "title", "company", "location", "description", "type", "status", "createdAt"]
+    },
+    "EmployerInsight": {
+      "title": "Employer Insight",
+      "description": "Cached insights for a company.",
+      "type": "object",
+      "properties": {
+        "query": { "type": "string" },
+        "summary": { "type": "string" },
+        "sources": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "uri": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          }
+        },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["query", "summary", "lastUpdated"]
     }
   },
   "firestore": {
@@ -80,6 +101,10 @@
     "/jobs/{jobId}": {
       "schema": "JobPost",
       "description": "Job listings."
+    },
+    "/employer_insights/{companyId}": {
+      "schema": "EmployerInsight",
+      "description": "Cached employer insights."
     }
   }
 }

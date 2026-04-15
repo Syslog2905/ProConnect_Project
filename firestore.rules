@@ -229,5 +229,27 @@ service cloud.firestore {
                        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
                        request.auth.token.email == "gershuin2905@gmail.com");
     }
+    // ===============================================================
+    // Employer Insights
+    // ===============================================================
+    
+    function isValidInsight(data) {
+      return data.query is string && data.query.size() < 200 &&
+             data.summary is string && data.summary.size() < 20000 &&
+             data.lastUpdated is timestamp &&
+             (!('sources' in data) || (data.sources is list && data.sources.size() <= 20));
+    }
+
+    match /employer_insights/{companyId} {
+      // Authenticated users can read cached insights
+      allow read: if isAuthenticated();
+      
+      // Authenticated users can create or update cached insights
+      allow create: if isAuthenticated() && isValidInsight(request.resource.data);
+      allow update: if isAuthenticated() && isValidInsight(request.resource.data);
+      
+      // Only admin can delete
+      allow delete: if isAdmin();
+    }
   }
 }
