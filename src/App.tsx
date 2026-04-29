@@ -17,7 +17,6 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db, doc, onSnapshot, signInWithGoogle } from './firebase';
 import { Auth } from './components/Auth';
 import { Dashboard } from './components/Dashboard';
-import { GDPRConsent } from './components/GDPRConsent';
 import { UserProfile } from './types';
 import { TermsOfService, PrivacyPolicy, CookiePolicy } from './components/LegalPages';
 
@@ -51,8 +50,6 @@ export default function App() {
     return () => unsub();
   }, [user]);
 
-  const showOnboarding = user && !profileLoading && (!profile || !profile.gdprConsent);
-
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
@@ -66,7 +63,7 @@ export default function App() {
     if (currentView === 'privacy') return <PrivacyPolicy onBack={() => setCurrentView('home')} />;
     if (currentView === 'cookies') return <CookiePolicy onBack={() => setCurrentView('home')} />;
 
-    if (user && profile?.gdprConsent) {
+    if (user && profile) {
       return (
         <motion.div
           initial={{ opacity: 0 }}
@@ -93,7 +90,7 @@ export default function App() {
                   <ShieldCheck size={16} />
                   <span>GDPR Compliant by Design</span>
                 </div>
-                <h1 className="text-5xl font-extrabold tracking-tight text-slate-900 sm:text-6xl">
+                <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 sm:text-6xl">
                   Connect with Top <span className="text-indigo-600">Professionals, Headhunters and Employers</span>
                 </h1>
                 <p className="mt-6 text-lg leading-8 text-slate-600 max-w-xl">
@@ -291,7 +288,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 overflow-x-hidden">
       {/* Navigation */}
       <nav className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -313,12 +310,6 @@ export default function App() {
           </div>
         </div>
       </nav>
-
-      <AnimatePresence mode="wait">
-        {showOnboarding && (
-          <GDPRConsent onComplete={() => {}} initialProfile={profile} />
-        )}
-      </AnimatePresence>
 
       <main>
         {renderContent()}

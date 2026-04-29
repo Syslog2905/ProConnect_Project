@@ -23,6 +23,16 @@ export interface UserProfile {
   isFoundingMember?: boolean;
   referralCode?: string;
   referredBy?: string;
+  photoURL?: string;
+  linkedinURL?: string;
+  cvURL?: string;
+}
+
+export interface Attachment {
+  name: string;
+  url: string;
+  type: string;
+  size?: number;
 }
 
 export interface Connection {
@@ -38,6 +48,7 @@ export interface Message {
   senderUid: string;
   receiverUid: string;
   content: string;
+  attachments?: Attachment[];
   createdAt: Timestamp;
 }
 

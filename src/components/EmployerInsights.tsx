@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, Star, ThumbsUp, ThumbsDown, ExternalLink, Info, Building2, RefreshCw, Calendar } from 'lucide-react';
+import { Search, Loader2, Star, ThumbsUp, ThumbsDown, ExternalLink, Info, Building2, RefreshCw, Calendar, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
 import { db, doc, getDoc, setDoc, serverTimestamp, Timestamp } from '../firebase';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
@@ -10,6 +12,7 @@ interface InsightResult {
   summary: string;
   sources: { uri: string; title: string }[];
   lastUpdated?: Timestamp;
+  isFromCache?: boolean;
 }
 
 export function EmployerInsights() {
@@ -63,7 +66,8 @@ export function EmployerInsights() {
             setResult({
               summary: data.summary,
               sources: data.sources || [],
-              lastUpdated: lastUpdated || undefined
+              lastUpdated: lastUpdated || undefined,
+              isFromCache: true
             });
             setLoading(false);
             return;
@@ -88,7 +92,15 @@ export function EmployerInsights() {
         contents: `Provide a detailed summary of employee reviews, ratings, and company culture for the company "${trimmedQuery}". 
         Search for information worldwide, including sites like Glassdoor, Indeed, and local review platforms (e.g., bgrabotodatel.com if it's a Bulgarian company). 
         Include common pros and cons mentioned by employees. 
-        Format the response in a professional, easy-to-read summary.`,
+        
+        CRITICAL FORMATTING RULES:
+        1. Use Markdown headings, bullet points, and bold text.
+        2. If you include a table for ratings, ensure it follows STRICT Markdown table syntax:
+           | Category | Estimated Rating |
+           | :--- | :--- |
+           | Example | ⭐⭐⭐ (3.5/5) |
+           Each row MUST be on a new line. Do NOT put the entire table on one line.
+        3. Make the summary professional and objective.`,
         config: {
           tools: [{ googleSearch: {} }],
         },
@@ -133,7 +145,8 @@ export function EmployerInsights() {
 
       setResult({
         ...newResult,
-        lastUpdated: Timestamp.now()
+        lastUpdated: Timestamp.now(),
+        isFromCache: false
       });
       console.log("State updated with new result.");
     } catch (err: any) {
@@ -241,34 +254,47 @@ export function EmployerInsights() {
           >
             <div className="rounded-3xl bg-white p-8 shadow-sm border border-slate-200">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
-                    <Building2 size={24} />
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-900">Analysis for {query}</h3>
-                </div>
-                
-                <div className="flex items-center gap-4">
-                  <div className="flex flex-col items-end">
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Last Date updated</span>
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-                      <Calendar size={12} className="text-slate-400" />
-                      {formatDate(result.lastUpdated)}
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                      <Building2 size={24} />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900">Analysis for {query}</h3>
+                      {result.isFromCache && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full mt-1">
+                          <Zap size={10} className="fill-indigo-500" />
+                          Cached Result
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <button
-                    onClick={() => fetchInsights(true)}
-                    disabled={loading}
-                    className="p-2.5 rounded-xl bg-slate-50 text-slate-600 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all disabled:opacity-50"
-                    title="Force refresh insights"
-                  >
-                    <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
-                  </button>
-                </div>
+                
+                  <div className="flex items-center gap-4">
+                    <div className="flex flex-col items-end">
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">
+                        {result.isFromCache ? 'Cached on' : 'Generated on'}
+                      </span>
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                        <Calendar size={12} className="text-slate-400" />
+                        {formatDate(result.lastUpdated)}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <button
+                        onClick={() => fetchInsights(true)}
+                        disabled={loading}
+                        className="p-2.5 rounded-xl bg-slate-50 text-slate-600 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all disabled:opacity-50 shadow-sm"
+                        title="Force refresh insights"
+                      >
+                        <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+                      </button>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Update</span>
+                    </div>
+                  </div>
               </div>
 
-              <div className="prose prose-slate max-w-none text-slate-600 leading-relaxed whitespace-pre-wrap">
-                {result.summary}
+              <div className="prose prose-slate max-w-none text-slate-600 leading-relaxed shadow-none table-auto w-full">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.summary}</ReactMarkdown>
               </div>
 
               {result.sources.length > 0 && (

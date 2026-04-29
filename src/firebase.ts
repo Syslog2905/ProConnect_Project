@@ -6,13 +6,15 @@ import {
   signOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  updateProfile
+  updateProfile,
+  sendEmailVerification
 } from 'firebase/auth';
 import { 
   getFirestore, 
   doc, 
   getDoc, 
   setDoc, 
+  updateDoc,
   collection, 
   query, 
   where, 
@@ -20,9 +22,13 @@ import {
   getDocs,
   Timestamp,
   getDocFromServer,
-  serverTimestamp
+  serverTimestamp,
+  or,
+  and
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
+
+import { UserRole } from './types';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -72,7 +78,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Shared Login Helper
 let isSigningIn = false;
 
-export async function createProfile(user: any, role: 'professional' | 'recruiter' | 'employer' = 'professional', referredBy?: string, displayNameOverride?: string) {
+export async function createProfile(user: any, role: UserRole = 'professional', referredBy?: string, displayNameOverride?: string) {
   const userRef = doc(db, 'users', user.uid);
   const userSnap = await getDoc(userRef);
   
@@ -106,10 +112,11 @@ export async function createProfile(user: any, role: 'professional' | 'recruiter
       uid: user.uid,
       displayName: displayNameOverride || user.displayName || 'New User',
       email: user.email || 'no-email@talentfabric.com',
+      photoURL: user.photoURL || null,
       role: role,
       visibility: role === 'professional' ? 'passive' : 'active',
-      gdprConsent: false,
-      consentDate: null,
+      gdprConsent: true,
+      consentDate: Timestamp.now(),
       createdAt: Timestamp.now(),
       subscriptionTier: isFoundingMember ? 'pro' : 'free',
       connectionCredits: role === 'professional' ? 3 : 10,
@@ -124,6 +131,7 @@ export async function createProfile(user: any, role: 'professional' | 'recruiter
     console.log('Attempting to save profile to Firestore:', JSON.stringify(newProfile));
     try {
       await setDoc(userRef, newProfile);
+      await syncPublicProfile(newProfile);
       console.log('Profile created successfully');
       return newProfile;
     } catch (err: any) {
@@ -131,12 +139,37 @@ export async function createProfile(user: any, role: 'professional' | 'recruiter
       handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}`);
     }
   } else {
-    console.log('User profile already exists');
-    return userSnap.data();
+    console.log('User profile already exists, ensuring public profile sync...');
+    const existingProfile = userSnap.data();
+    await syncPublicProfile(existingProfile as any);
+    return existingProfile;
   }
 }
 
-export async function signInWithGoogle(role: 'professional' | 'recruiter' | 'employer' = 'professional', referredBy?: string) {
+async function syncPublicProfile(profile: any) {
+  try {
+    const publicRef = doc(db, 'public_profiles', profile.uid);
+    await setDoc(publicRef, {
+      uid: profile.uid,
+      displayName: profile.displayName,
+      headline: profile.headline || '',
+      bio: profile.bio || '',
+      skills: profile.skills || [],
+      photoURL: profile.photoURL || null,
+      linkedinURL: profile.linkedinURL || null,
+      role: profile.role,
+      visibility: profile.visibility,
+      isFeatured: profile.isFeatured || false,
+      isFoundingMember: profile.isFoundingMember || false,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    console.log('Public profile synced successfully');
+  } catch (err) {
+    console.error('Error syncing public profile:', err);
+  }
+}
+
+export async function signInWithGoogle(role: UserRole = 'professional', referredBy?: string) {
   if (isSigningIn) {
     console.log('Login already in progress, ignoring request');
     return;
@@ -186,6 +219,7 @@ export {
   doc, 
   getDoc, 
   setDoc, 
+  updateDoc,
   collection, 
   query, 
   where, 
@@ -193,7 +227,10 @@ export {
   getDocs,
   Timestamp,
   serverTimestamp,
+  or,
+  and,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  updateProfile
+  updateProfile,
+  sendEmailVerification
 };

@@ -11,11 +11,12 @@
         "headline": { "type": "string" },
         "bio": { "type": "string" },
         "skills": { "type": "array", "items": { "type": "string" } },
-        "role": { "type": "string", "enum": ["professional", "recruiter", "admin"] },
+        "role": { "type": "string", "enum": ["professional", "recruiter", "employer", "admin"] },
         "visibility": { "type": "string", "enum": ["active", "passive", "hidden"] },
         "gdprConsent": { "type": "boolean" },
         "consentDate": { "type": "string", "format": "date-time" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "linkedinURL": { "type": "string", "format": "uri" }
       },
       "required": ["uid", "email", "role", "gdprConsent"]
     },

@@ -4,7 +4,7 @@ import { UserProfile } from '../types';
 
 interface PricingProps {
   profile: UserProfile;
-  onUpgrade: (tier: 'pro' | 'free') => void;
+  onUpgrade: (tier: 'pro' | 'free' | 'one-time') => void;
   isUpgrading?: boolean;
   error?: string | null;
 }
@@ -15,7 +15,7 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
   const businessPlans = [
     {
       name: 'Free',
-      price: '$0',
+      price: '€0',
       description: profile.role === 'employer' ? 'Perfect for small companies hiring.' : 'Perfect for exploring the talent pool.',
       features: [
         'Browse all Active profiles',
@@ -30,7 +30,7 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
     },
     {
       name: 'Pro',
-      price: '$49',
+      price: '€49',
       period: '/mo',
       description: profile.role === 'employer' ? 'For companies with active hiring needs.' : 'For serious recruiters and headhunters.',
       features: [
@@ -41,8 +41,8 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
         'Verified Business Badge',
         'Priority Support'
       ],
-      cta: profile.subscriptionTier === 'pro' ? 'Current Plan' : 'Upgrade to Pro',
-      disabled: profile.subscriptionTier === 'pro',
+      cta: profile.subscriptionTier === 'pro' ? 'Change Plan' : 'Upgrade to Pro',
+      disabled: false, // Allow Pro users to click "Change Plan" to manage subscription
       tier: 'pro',
       highlight: true
     }
@@ -50,7 +50,7 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
 
   const payPerPost = {
     name: 'Pay-per-Post',
-    price: '$19',
+    price: '€19',
     period: '/listing',
     description: 'Competitive pricing for single job announcements.',
     features: [
@@ -59,7 +59,7 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
       'Industry & Role categorization',
       'Basic applicant tracking'
     ],
-    cta: 'Post a Job',
+    cta: 'Post One Job',
     disabled: false,
     tier: 'one-time',
     highlight: false
@@ -68,7 +68,7 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
   const professionalPlans = [
     {
       name: 'Free',
-      price: '$0',
+      price: '€0',
       description: 'Always free for professionals.',
       features: [
         'Create professional profile',
@@ -83,7 +83,7 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
     },
     {
       name: 'Featured',
-      price: '$10',
+      price: '€10',
       period: '/7 days',
       description: 'Get noticed by top headhunters.',
       features: [
@@ -92,8 +92,8 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
         'Weekly visibility report',
         'Priority in Discovery feed'
       ],
-      cta: profile.isFeatured ? 'Currently Featured' : 'Boost Profile',
-      disabled: profile.isFeatured,
+      cta: profile.isFeatured ? 'Change Plan' : 'Boost Profile',
+      disabled: false,
       tier: 'pro',
       highlight: true
     }
@@ -275,11 +275,11 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
                 Flat Success Fee
               </h4>
               <p className="text-slate-400 text-sm max-w-md">
-                Forget 20% agency fees. We charge a flat <span className="text-white font-bold">$500 success fee</span> per hire made through TalentFabric.
+                Forget 20% agency fees. We charge a flat <span className="text-white font-bold">€500 success fee</span> per hire made through TalentFabric.
               </p>
             </div>
             <div className="text-center md:text-right">
-              <div className="text-3xl font-bold">$500</div>
+              <div className="text-3xl font-bold">€500</div>
               <div className="text-xs text-slate-500 uppercase tracking-widest">Per Hire</div>
             </div>
           </div>
