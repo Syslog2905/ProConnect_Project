@@ -11,6 +11,7 @@ interface PricingProps {
 
 export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps) {
   const isBusiness = profile.role === 'recruiter' || profile.role === 'employer';
+  const currentTier = profile.subscriptionTier || 'free';
 
   const businessPlans = [
     {
@@ -23,8 +24,8 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
         'Post 1 Job Listing (Standard)',
         'Basic search filters'
       ],
-      cta: profile.subscriptionTier === 'free' ? 'Current Plan' : 'Downgrade to Free',
-      disabled: profile.subscriptionTier === 'free',
+      cta: currentTier === 'free' ? 'Current Plan' : 'Downgrade to Free',
+      disabled: currentTier === 'free',
       tier: 'free',
       highlight: false
     },
@@ -41,7 +42,7 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
         'Verified Business Badge',
         'Priority Support'
       ],
-      cta: profile.subscriptionTier === 'pro' ? 'Change Plan' : 'Upgrade to Pro',
+      cta: currentTier === 'pro' ? 'Change Plan' : 'Upgrade to Pro',
       disabled: false, // Allow Pro users to click "Change Plan" to manage subscription
       tier: 'pro',
       highlight: true
@@ -245,7 +246,7 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
             </ul>
 
             <button
-              onClick={() => !plan.disabled && onUpgrade(plan.tier as 'pro' | 'free')}
+              onClick={() => !plan.disabled && onUpgrade(plan.tier as 'pro' | 'free' | 'one-time')}
               disabled={plan.disabled || isUpgrading}
               className={`w-full py-4 rounded-2xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2 ${
                 plan.highlight

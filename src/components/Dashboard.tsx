@@ -570,6 +570,18 @@ export function Dashboard() {
         isFoundingMember: profile.isFoundingMember
       };
       await setDoc(doc(db, 'jobs', jobId), newJob);
+
+      // Decrement one-time job posting credit if they are on free tier and posted an extra job
+      const myJobsCount = jobs.filter(j => j.recruiterUid === user.uid).length;
+      if ((profile.subscriptionTier || 'free') === 'free' && myJobsCount >= 1) {
+        if ((profile.oneTimeJobsRemaining || 0) > 0) {
+          const userRef = doc(db, 'users', user.uid);
+          await updateDoc(userRef, {
+            oneTimeJobsRemaining: (profile.oneTimeJobsRemaining || 1) - 1
+          });
+        }
+      }
+
       setIsPostingJob(false);
       showToast("Job posted successfully!");
       setJobForm({
@@ -2111,7 +2123,7 @@ export function Dashboard() {
                   </h2>
                   {(profile.role === 'recruiter' || profile.role === 'employer') && (
                     <div className="flex flex-col sm:flex-row gap-3">
-                      {profile.subscriptionTier === 'free' && (
+                      {(profile.subscriptionTier || 'free') === 'free' && (
                         <button 
                           onClick={() => setActiveTab('pricing')}
                           className="flex items-center justify-center gap-2 rounded-2xl bg-indigo-50 px-6 py-3.5 text-sm font-bold text-indigo-600 border border-indigo-100 hover:bg-indigo-100 transition-all w-full sm:w-auto"
@@ -2123,8 +2135,10 @@ export function Dashboard() {
                       <button 
                         onClick={() => {
                           const myJobsCount = jobs.filter(j => j.recruiterUid === user.uid).length;
-                          if (profile.subscriptionTier === 'free' && myJobsCount >= 1) {
-                            showToast("Free plan is limited to 1 job listing. Upgrade to Pro for unlimited postings!", "info");
+                          const oneTimeRemaining = profile.oneTimeJobsRemaining || 0;
+                          const isFree = (profile.subscriptionTier || 'free') === 'free';
+                          if (isFree && myJobsCount >= (1 + oneTimeRemaining)) {
+                            showToast("You have reached your job posting limit. Purchase a 'Pay-per-Post' slot, or upgrade to Pro for unlimited postings!", "info");
                             setActiveTab('pricing');
                           } else {
                             setIsPostingJob(true);
@@ -2139,12 +2153,16 @@ export function Dashboard() {
                   )}
                 </div>
 
-                {profile.role !== 'professional' && profile.subscriptionTier === 'free' && (
+                {profile.role !== 'professional' && (profile.subscriptionTier || 'free') === 'free' && (
                   <div className="p-4 rounded-2xl bg-amber-50 border border-amber-100 flex items-center gap-3">
                     <AlertTriangle className="text-amber-500 shrink-0" size={20} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-amber-900">Free Tier Limit</p>
-                      <p className="text-xs text-amber-700">You are on the Free plan. You can have 1 active job listing. <button onClick={() => setActiveTab('pricing')} className="font-bold underline hover:text-amber-800 transition-colors">Upgrade to Pro</button> for unlimited hiring.</p>
+                      <p className="text-xs text-amber-700">
+                        You are on the Free plan. You can have 1 active job listing
+                        {profile.oneTimeJobsRemaining ? ` + ${profile.oneTimeJobsRemaining} paid Pay-per-Post slot(s) remaining` : ''}. 
+                        {" "}<button onClick={() => setActiveTab('pricing')} className="font-bold underline hover:text-amber-800 transition-colors">Upgrade to Pro</button> or buy a single post slot to grow your listings.
+                      </p>
                     </div>
                   </div>
                 )}

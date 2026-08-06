@@ -17,6 +17,7 @@ export interface UserProfile {
   consentDate: Timestamp | null;
   createdAt: Timestamp;
   subscriptionTier?: 'free' | 'pro';
+  oneTimeJobsRemaining?: number;
   connectionCredits?: number;
   isFeatured?: boolean;
   featuredUntil?: Timestamp | null;

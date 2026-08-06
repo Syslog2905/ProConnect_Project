@@ -90,7 +90,7 @@ export function EmployerInsights() {
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Provide a detailed summary of employee reviews, ratings, and company culture for the company "${trimmedQuery}". 
-        Search for information worldwide, including sites like Glassdoor, Indeed, and local review platforms (e.g., bgrabotodatel.com if it's a Bulgarian company). 
+        Search for information worldwide, including sites like Glassdoor, Indeed, and local review platforms. 
         Include common pros and cons mentioned by employees. 
         
         CRITICAL FORMATTING RULES:
@@ -352,7 +352,7 @@ export function EmployerInsights() {
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Search for a Company</h3>
             <p className="text-slate-500 max-w-md mx-auto">
-              Enter the name of a Bulgarian company to see what its employees are saying about the work environment, management, and benefits.
+              Enter the name of a company to see what its employees are saying about the work environment, management, and benefits.
             </p>
           </motion.div>
         )}

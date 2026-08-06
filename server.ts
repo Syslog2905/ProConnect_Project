@@ -232,6 +232,11 @@ async function startServer() {
               featuredUntil: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
+          } else if (variantId === process.env.VITE_LEMON_SQUEEZY_SINGLE_JOB_VARIANT_ID) {
+            await userRef.update({
+              oneTimeJobsRemaining: admin.firestore.FieldValue.increment(1),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
           }
         }
 
