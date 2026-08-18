@@ -754,7 +754,10 @@ export function Dashboard() {
           variantId: String(variantId),
           userId: user.uid,
           userEmail: user.email,
-          returnUrl: window.location.origin
+          // Only a relative path: the server rebuilds the absolute return URL
+          // on the canonical origin so buyers land back on talentfabric.eu
+          // rather than on whatever preview host started the checkout.
+          returnPath: '/?checkout=success'
         }),
       });
 
