@@ -31,7 +31,7 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
     },
     {
       name: 'Pro',
-      price: '€49',
+      price: '€99.90',
       period: '/mo',
       description: profile.role === 'employer' ? 'For companies with active hiring needs.' : 'For serious recruiters and headhunters.',
       features: [
@@ -51,7 +51,7 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
 
   const payPerPost = {
     name: 'Pay-per-Post',
-    price: '€19',
+    price: '€29',
     period: '/listing',
     description: 'Competitive pricing for single job announcements.',
     features: [
@@ -84,7 +84,7 @@ export function Pricing({ profile, onUpgrade, isUpgrading, error }: PricingProps
     },
     {
       name: 'Featured',
-      price: '€10',
+      price: '€9.99',
       period: '/7 days',
       description: 'Get noticed by top headhunters.',
       features: [
