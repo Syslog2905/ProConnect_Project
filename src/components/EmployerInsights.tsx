@@ -1,12 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Search, Loader2, Star, ThumbsUp, ThumbsDown, ExternalLink, Info, Building2, RefreshCw, Calendar, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI } from "@google/genai";
-import { db, doc, getDoc, setDoc, serverTimestamp, Timestamp } from '../firebase';
+import { auth, db, doc, getDoc, setDoc, serverTimestamp, Timestamp } from '../firebase';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 interface InsightResult {
   summary: string;
@@ -20,10 +17,6 @@ export function EmployerInsights() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<InsightResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    console.log("EmployerInsights mounted. API Key present:", !!process.env.GEMINI_API_KEY);
-  }, []);
 
   const fetchInsights = async (forceRefresh = false) => {
     const trimmedQuery = query.trim();
@@ -78,55 +71,20 @@ export function EmployerInsights() {
         }
       }
 
-      console.log("Preparing Gemini API call...");
-      const apiKey = process.env.GEMINI_API_KEY;
-      console.log("API Key present in fetchInsights:", !!apiKey);
-      
-      if (!apiKey) {
-        throw new Error("Gemini API key is missing. Please ensure it is set in your environment secrets.");
-      }
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error("Please sign in to use Employer Insights.");
 
-      console.log("Calling ai.models.generateContent...");
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Provide a detailed summary of employee reviews, ratings, and company culture for the company "${trimmedQuery}". 
-        Search for information worldwide, including sites like Glassdoor, Indeed, and local review platforms. 
-        Include common pros and cons mentioned by employees. 
-        
-        CRITICAL FORMATTING RULES:
-        1. Use Markdown headings, bullet points, and bold text.
-        2. If you include a table for ratings, ensure it follows STRICT Markdown table syntax:
-           | Category | Estimated Rating |
-           | :--- | :--- |
-           | Example | ⭐⭐⭐ (3.5/5) |
-           Each row MUST be on a new line. Do NOT put the entire table on one line.
-        3. Make the summary professional and objective.`,
-        config: {
-          tools: [{ googleSearch: {} }],
-        },
+      const response = await fetch('/api/employer-insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ company: trimmedQuery }),
       });
-
-      console.log("Gemini API response received. Text length:", response.text?.length);
-      const summary = response.text || "No insights found for this company.";
-      
-      // Safer source extraction
-      let sources: { uri: string; title: string }[] = [];
-      try {
-        const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
-        console.log("Grounding Metadata present:", !!groundingMetadata);
-        const chunks = groundingMetadata?.groundingChunks;
-        if (Array.isArray(chunks)) {
-          console.log("Found grounding chunks:", chunks.length);
-          sources = chunks
-            .filter((c: any) => c?.web?.uri)
-            .map((c: any) => ({
-              uri: c.web.uri,
-              title: c.web.title || "Source",
-            }));
-        }
-      } catch (sourceErr) {
-        console.warn("Error parsing sources:", sourceErr);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to fetch employer insights. Please try again later.");
       }
+      const summary: string = payload.summary;
+      const sources: { uri: string; title: string }[] = payload.sources || [];
 
       const newResult = { summary, sources };
       
