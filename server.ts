@@ -12,6 +12,7 @@ import {
 import admin from "firebase-admin";
 import crypto from "crypto";
 import fs from "fs";
+import { GoogleGenAI } from "@google/genai";
 
 dotenv.config();
 
@@ -434,6 +435,59 @@ async function startServer() {
         console.error("Unexpected error creating Lemon Squeezy checkout:", error);
         const { status, message } = describeLemonError(error);
         res.status(status).json({ error: message });
+      }
+    });
+
+    // Employer Insights (Gemini). The key is read at runtime on the server, so it
+    // never ships in the browser bundle and works with runtime-only secrets.
+    app.post("/api/employer-insights", async (req, res) => {
+      const geminiKey = process.env.GEMINI_API_KEY;
+      if (!geminiKey) {
+        console.error("CRITICAL: GEMINI_API_KEY is missing.");
+        return res.status(500).json({ error: "Server configuration error: GEMINI_API_KEY is not set on the server." });
+      }
+
+      const idToken = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+      if (!idToken) return res.status(401).json({ error: "Sign in to use Employer Insights." });
+      try {
+        await admin.auth().verifyIdToken(idToken);
+      } catch (err) {
+        console.warn("Employer insights: invalid ID token:", err);
+        return res.status(401).json({ error: "Your session has expired. Please sign in again." });
+      }
+
+      const company = typeof req.body?.company === "string" ? req.body.company.trim().slice(0, 100) : "";
+      if (!company) return res.status(400).json({ error: "Company name is required." });
+
+      try {
+        const ai = new GoogleGenAI({ apiKey: geminiKey });
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: `Provide a detailed summary of employee reviews, ratings, and company culture for the company "${company}". 
+        Search for information worldwide, including sites like Glassdoor, Indeed, and local review platforms. 
+        Include common pros and cons mentioned by employees. 
+        
+        CRITICAL FORMATTING RULES:
+        1. Use Markdown headings, bullet points, and bold text.
+        2. If you include a table for ratings, ensure it follows STRICT Markdown table syntax:
+           | Category | Estimated Rating |
+           | :--- | :--- |
+           | Example | ⭐⭐⭐ (3.5/5) |
+           Each row MUST be on a new line. Do NOT put the entire table on one line.
+        3. Make the summary professional and objective.`,
+          config: { tools: [{ googleSearch: {} }] },
+        });
+
+        const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+        const sources = Array.isArray(chunks)
+          ? chunks
+              .filter((c: any) => c?.web?.uri)
+              .map((c: any) => ({ uri: c.web.uri, title: c.web.title || "Source" }))
+          : [];
+        res.json({ summary: response.text || "No insights found for this company.", sources });
+      } catch (err) {
+        console.error("Gemini request failed:", err);
+        res.status(502).json({ error: "Failed to generate insights. Please try again later." });
       }
     });
 
